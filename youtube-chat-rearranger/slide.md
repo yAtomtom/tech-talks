@@ -35,7 +35,9 @@ section blockquote>blockquote>blockquote {
 ## 背景
 ## YouTubeのレイアウト
 ## Chrome拡張機能の作成の基本
-## チャット欄の配置を変更する（DOMを動かさずCSS Gridで）
+## チャット欄の配置を変更する
+## まとめ
+## 付録
 
 
 ---
