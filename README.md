@@ -2,6 +2,8 @@
 
 技術発表のスライド資料置き場。サイトは [Eleventy](https://www.11ty.dev/)（テンプレート: Nunjucks）で生成する。
 
+**公開サイト**: https://yatomtom.github.io/tech-talks/
+
 ## 一覧
 - [youtube-chat-rearranger](./youtube-chat-rearranger/) — YouTubeチャット欄の配置を変更するChrome拡張の解説
 
