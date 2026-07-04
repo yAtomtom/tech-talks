@@ -1,0 +1,15 @@
+---
+layout: base.njk
+title: "tech-talks — 技術発表スライド"
+---
+<h1>tech-talks</h1>
+<p class="lead">技術発表のスライド資料置き場。</p>
+
+<ul>
+{% for talk in talks %}
+  <li>
+    <div class="title"><a href="{{ ('/talks/' + talk.slug + '/') | url }}">{{ talk.title }}</a></div>
+    <div class="desc">{{ talk.description }}</div>
+  </li>
+{% endfor %}
+</ul>

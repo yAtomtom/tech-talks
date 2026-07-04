@@ -1,0 +1,14 @@
+---
+layout: base.njk
+pagination:
+  data: talks
+  size: 1
+  alias: talk
+permalink: "/talks/{{ talk.slug }}/"
+eleventyComputed:
+  title: "{{ talk.title }} — tech-talks"
+---
+<p><a href="{{ '/' | url }}">← 一覧へ</a></p>
+<h1>{{ talk.title }}</h1>
+<p class="desc">{{ talk.description }}</p>
+<p><a href="{{ talk.slideUrl | url }}">スライドを見る →</a></p>

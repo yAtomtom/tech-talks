@@ -1,0 +1,14 @@
+{
+  "name": "tech-talks",
+  "version": "1.0.0",
+  "private": true,
+  "description": "技術発表のスライド資料置き場（Eleventy + Nunjucks）",
+  "scripts": {
+    "build": "eleventy",
+    "start": "eleventy --serve",
+    "clean": "rm -rf _site"
+  },
+  "devDependencies": {
+    "@11ty/eleventy": "^3.0.0"
+  }
+}
