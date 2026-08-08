@@ -4,5 +4,11 @@
     "title": "youtube-chat-rearranger",
     "description": "YouTubeチャット欄の配置を変更するChrome拡張の解説",
     "slideUrl": "/youtube-chat-rearranger/slide.html"
+  },
+  {
+    "slug": "batch-blur",
+    "title": "batch-blur",
+    "description": "Tauri v2 で作る一括画像ブラーアプリの解説",
+    "slideUrl": "/batch-blur/slide.html"
   }
 ]

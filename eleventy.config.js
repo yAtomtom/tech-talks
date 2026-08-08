@@ -7,6 +7,8 @@ module.exports = function (eleventyConfig) {
   eleventyConfig.addPassthroughCopy({
     "youtube-chat-rearranger/slide.html": "youtube-chat-rearranger/slide.html",
     "youtube-chat-rearranger/img": "youtube-chat-rearranger/img",
+    "batch-blur/slide.html": "batch-blur/slide.html",
+    "batch-blur/img": "batch-blur/img",
   });
 
   return {

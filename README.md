@@ -6,8 +6,9 @@
 
 ## 一覧
 - [youtube-chat-rearranger](./youtube-chat-rearranger/) — YouTubeチャット欄の配置を変更するChrome拡張の解説
+- [batch-blur](./batch-blur/) — Tauri v2 で作る一括画像ブラーアプリの解説
 
-発表の追加は `src/_data/talks.json` に1エントリ追加するだけ（トップページと紹介ページが自動生成される）。
+発表の追加手順: Marp で `slide.html` を生成してコミットし、`eleventy.config.js` のパススルーコピーと `src/_data/talks.json` にエントリを追加する（トップページと紹介ページは `talks.json` から自動生成される）。
 
 ## サイトのビルド（Eleventy）
 
