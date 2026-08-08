@@ -22,7 +22,9 @@ section blockquote>blockquote>blockquote {
   border-top: 0.1em dashed #555;
 }
 
-section img {
+/* コンテンツ画像のセンタリング。twemoji（例: 見出しの ↔）を巻き込むと
+   display:block で文中改行されるため除外する */
+section img:not([data-marp-twemoji]) {
   display: block;
   margin: 0 auto;
 }
