@@ -228,7 +228,7 @@ https://github.com/yAtomtom/batch-blur
 
 境界は IPC の 1 本（Web = React 18 + Vite 5）
 
-<!-- note: 出典 lib.rs:3-7（層構成コメント）, App.tsx, Canvas.tsx（Web は pixel を触らず結果表示のみ）。FS I/O は repository ポート経由（commands.rs が DI）。Web もクライアント固有の純粋ドメイン(EditHistory/SaveConfiguration)を持つ -->
+<!-- note: 出典 lib.rs のモジュールコメント（層構成）, App.tsx, Canvas.tsx（Web は pixel を触らず結果表示のみ）。FS I/O は repository ポート経由（commands.rs が DI）。Web もクライアント固有の純粋ドメイン(EditHistory/SaveConfiguration)を持つ -->
 
 ---
 
@@ -248,7 +248,7 @@ https://github.com/yAtomtom/batch-blur
 - 境界の仕事は**実行手順の組み立てと共有状態の管理** — spawn_blocking への退避、キャンセルフラグ、プレビューキャッシュ、進捗の逐次送出
 - ファイル単位の失敗・キャンセルは**エラーではなく結果** — `ExportOutcome` が生エラーを保持し（**握り潰さない**）、`Err` は前提検証とインフラ障害のみ
 
-<!-- note: 登録 lib.rs:21-26、本体 commands.rs。境界型は UI 向け素朴形に射影(types.rs)し「本来関心を持つ引数のみ」受け取る(時刻/ユーザー情報なし=インターフェース分離)。古い応答の破棄はフロント側（usePreview.ts:51-71 の stale フラグ＋74-80 の render 時 path 照合、次章）。camelCase(JS)↔snake_case(Rust) 自動マップ＋src/ipc/types.ts に手書きミラー、tauri-specta 未導入。共有状態は AppState = cancel / preview_cache / repository（commands.rs:39-55）、進捗送出は on_progress.send（commands.rs:234-239）。ExportOutcome {completed, canceled, failures} は types.rs:75-88 — 部分失敗は ExportFailure {path, error} で生エラー保持（commands.rs:226-233）、キャンセルは失敗ではなく正常な中断（commands.rs:203-207）、Err に残るのは前提検証（出力パス衝突・別名保存先の既存）とインフラ障害のみ。TS 側の契約は src/ipc/types.ts・commands.ts（exportBatch が Promise<ExportOutcome>）、消費は useExport.ts（runToken 世代管理で完了後の遅延進捗を無視し outcome を正とする。フックを呼ぶのは App.tsx:51、BatchRunner.tsx は型のみ import して state/onRun/onCancel を props で受ける表示コンポーネント）。spawn_blocking は次頁で詳説 -->
+<!-- note: 登録は lib.rs の invoke_handler、本体 commands.rs。境界型は UI 向け素朴形に射影(types.rs)し「本来関心を持つ引数のみ」受け取る(時刻/ユーザー情報なし=インターフェース分離)。古い応答の破棄はフロント側（usePreview の effect の stale フラグ＋戻り値の render 時 path 照合、次章）。camelCase(JS)↔snake_case(Rust) 自動マップ＋src/ipc/types.ts に手書きミラー、tauri-specta 未導入。共有状態は commands.rs の AppState = cancel / preview_cache / repository、進捗送出は export_batch 内の on_progress.send。ExportOutcome {completed, canceled, failures} は types.rs — 部分失敗は ExportFailure {path, error} で生エラー保持、キャンセルは失敗ではなく正常な中断（いずれも export_batch 内の分岐）、Err に残るのは前提検証（出力パス衝突・別名保存先の既存）とインフラ障害のみ。TS 側の契約は src/ipc/types.ts・commands.ts（exportBatch が Promise<ExportOutcome>）、消費は useExport.ts（runToken 世代管理で完了後の遅延進捗を無視し outcome を正とする。フックを呼ぶのは App.tsx、BatchRunner.tsx は型のみ import して state/onRun/onCancel を props で受ける表示コンポーネント）。spawn_blocking は次頁で詳説 -->
 
 ---
 
@@ -287,7 +287,7 @@ spawn_blocking:
 - `repository` が FS を隔離 → `imaging` も純粋コーデックに（in-memory で差し替えテスト）
 - `[lib]` 分離で **GUI 起動なし**に domain/imaging/repository をテスト
 
-<!-- note: 出典 Cargo.toml [lib]、lib.rs:3-7 の層コメント。依存の直接性 commands→repository→imaging::codec（commands.rs / types.rs / blur.rs / repository/local_fs.rs）。in-memory ポート充足は repository/mod.rs の InMemoryRepository。フロントも同型: domain(純粋TS。SaveConfiguration.ts:6 に ipc/types への type-only import が1本あるがランタイム依存なし)→features/ipc→app -->
+<!-- note: 出典 Cargo.toml の [lib]、lib.rs のモジュールコメント（層構成）。依存の直接性 commands→repository→imaging::codec（commands.rs / types.rs / blur.rs / repository/local_fs.rs）。in-memory ポート充足は repository/mod.rs の InMemoryRepository。フロントも同型: domain(純粋TS。SaveConfiguration.ts に ipc/types への type-only import が1本あるがランタイム依存なし)→features/ipc→app -->
 
 > > > **`#[cfg(test)]`**＝テスト時だけコンパイルする Rust の印（実装と同ファイルに書く）／**`[lib]`**＝アプリをライブラリとして切り出す `Cargo.toml` 設定（GUI 本体と別にビルド・テスト可）
 
@@ -357,7 +357,7 @@ src/
 - 重い前処理は**キャッシュ**、毎回走るのは**ブラー＋PNG**、UI 側は**間引きと採否**だけ
 - 以降のスライドで、上記の図の工夫した点を1つずつ — 競合制御 / スケール補正 / キャッシュ
 
-<!-- note: 出典 commands.rs:97-156（generate_preview）, usePreview.ts:17,43-72, types.rs:45-54。data URL は <img src> にそのまま入るので追加のアセットプロトコルが要らない。プレビュー PNG には原本の ICC を埋めて書き出しと色を揃える（commands.rs:143）。base64 で約33%膨らむが、長辺1600の PNG 1枚なので実用上問題にならない。130 という値は初回リリース(2584b07)から変わっておらずコードに根拠コメントはない＝経験的に決めた値。質問されたら「体感で追従し、かつ連打をまとめられる範囲から選んだ」と答える -->
+<!-- note: 出典 commands.rs の generate_preview, usePreview.ts の DEBOUNCE_MS と usePreview の effect, types.rs の PreviewResult。data URL は <img src> にそのまま入るので追加のアセットプロトコルが要らない。プレビュー PNG には原本の ICC を埋めて書き出しと色を揃える（commands.rs の generate_preview が encode_to_bytes に渡す）。base64 で約33%膨らむが、長辺1600の PNG 1枚なので実用上問題にならない。130 という値は初回リリース(2584b07)から変わっておらずコードに根拠コメントはない＝経験的に決めた値。質問されたら「体感で追従し、かつ連打をまとめられる範囲から選んだ」と答える -->
 
 > > > **debounce**＝連続入力を間引き、**最後の入力から一定時間経ってから 1 回だけ**送る仕組み。スライダーを端から端まで動かしても、送信は指を止めた 1 回だけ。130ms は「即応と感じる 0.1 秒前後」かつ連打をまとめられる帯／**1600px**＝プレビュー基準画像の長辺上限。上げるほど忠実・下げるほど毎入力が軽い。元が 1600px 以下なら**縮小せず等倍**（拡大はしない）
 
@@ -374,7 +374,7 @@ src/
 - cleanup が旧要求を無効化し、結果は **render 時に path 照合** → 旧画像を出さない
 - in-flight は止めない — プレビューは軽く副作用もないので**捨てる方が単純**
 
-<!-- note: 出典 usePreview.ts:43-72（effect: stale フラグ 51、cleanup 68-71）, 74-80（render 時の path 照合）, types.rs:45-54。debounce は effect cleanup の clearTimeout、依存配列は settings.kind/radius の「値」（オブジェクト同一性に依存しない）。req_id は Rust へのエコーバック用の一意 ID として残るが採否判定には使わない（usePreview.ts:40-41）。旧実装は reqId >= latestAccepted の単調カウンタ比較 — path と紐付かず画像切替をまたぐ採否を識別できないため、旧画像が一瞬出る・エラー表示が切替後に残る余地があった → stale フラグ＋path 照合で解消（bug-fix）。エラーも {path, message} で保持し切替後に持ち越さない。stale 無効化により state は常に「現在の選択 × 現在の設定」への最新リクエストの結果だけになり、設定のみの変更（path 同一）の間は前回結果を出し続けてチラつきを防ぐ。キャンセルを持つのは書き出しだけ（2章 cancel_export）。in-flight が重なるのは、処理時間が debounce 間隔より長いとき（フルサイズのデコードを伴う初回など） -->
+<!-- note: 出典 usePreview.ts の usePreview（effect 内の stale フラグと cleanup）, 戻り値の render 時 path 照合, types.rs の PreviewResult。debounce は effect cleanup の clearTimeout、依存配列は settings.kind/radius の「値」（オブジェクト同一性に依存しない）。req_id は Rust へのエコーバック用の一意 ID として残るが採否判定には使わない（usePreview.ts の reqId 生成）。旧実装は reqId >= latestAccepted の単調カウンタ比較 — path と紐付かず画像切替をまたぐ採否を識別できないため、旧画像が一瞬出る・エラー表示が切替後に残る余地があった → stale フラグ＋path 照合で解消（bug-fix）。エラーも {path, message} で保持し切替後に持ち越さない。stale 無効化により state は常に「現在の選択 × 現在の設定」への最新リクエストの結果だけになり、設定のみの変更（path 同一）の間は前回結果を出し続けてチラつきを防ぐ。キャンセルを持つのは書き出しだけ（2章 cancel_export）。in-flight が重なるのは、処理時間が debounce 間隔より長いとき（フルサイズのデコードを伴う初回など） -->
 
 > > > **in-flight**＝送信済みでまだ応答が返っていないリクエスト。処理が debounce の 130ms より長引くと要求が重なり、複数が同時に in-flight になる。`invoke` は発行後に取り消せず Rust 側は最後まで走る ＝ **受け取ってから捨てる**
 
@@ -393,7 +393,7 @@ src/
 - デコードも `decode_rgba` の共通経路 → EXIF 向きの正規化も両経路で一致する
 - → ズレうる箇所が構造的に **1 行**に閉じる（レビューで守り切れる粒度）
 
-<!-- note: 出典 blur.rs:70-85（apply_stack / apply_stack_scaled は同じ fold 構造で spec ごとに blur_rgba を呼ぶ）, blur.rs:3-4（WYSIWYG をモジュールコメントで明記）, codec.rs:38-46（EXIF Orientation 正規化）。テスト apply_stack_single_matches_blur_rgba（blur.rs:201-207）が「スタック経由 == 直接呼び出し」を固定。※画素に触る関数自体は他にもある（imageops::resize・PNG encode・premultiply/unpremultiply）ので、主張はブラー実装の単一性に限定する -->
+<!-- note: 出典 blur.rs の apply_stack / apply_stack_scaled（同じ fold 構造で spec ごとに blur_rgba を呼ぶ）, blur.rs のモジュールコメント（WYSIWYG を明記）, codec.rs の decode_rgba（EXIF Orientation 正規化）。テスト apply_stack_single_matches_blur_rgba が「スタック経由 == 直接呼び出し」を固定。※主張の正確な形は「フィルタ適用の入口が blur_rgba ただ 1 つ」。カーネル自体は種別ごとに分かれる（blur_channels の match）が、プレビューも書き出しも同じ blur_rgba を通るので WYSIWYG は種別に依らず成り立つ。画素に触る関数は他にもある（PNG encode・premultiply/unpremultiply） -->
 
 ---
 
@@ -412,7 +412,7 @@ $$ \text{preview\_radius} = \max\!\left(1,\ \mathrm{round}(\text{radius} \times 
 | 1200×900 | 1.00 | 20 | 20（縮小なし＝完全一致）|
 
 <!-- TODO: scale 補正あり/なしの比較画像 -->
-<!-- note: 出典 blur.rs:81-97（apply_stack_scaled / scaled_radius: round＋下限 1）, codec.rs:133-154（preview_scale / downscale_for_preview, Triangle 補間）, App.tsx:38（PREVIEW_MAX_DIM=1600）。max(1, …) の下限は正の半径のみ＝radius=0 は scaled_radius が 0 を返し恒等のまま（担保は scaled_radius_keeps_positive_radius_above_zero blur.rs:210-216）。下限の理由（round で 0 に落ちると「プレビュー素通し・出力ぼけ」の WYSIWYG 破れ）は「近似が残すズレ」の頁で詳述。min(1, …) は preview_scale が長辺 <= max_dim で 1.0 を返す仕様に対応。妥当性検証: 「フル適用→縮小」を正解として 1 次元で比較すると、補正ありの平均誤差は 0.45–2.0/255（r>=3）、補正なしは 1.8–26 で 5〜25 倍改善。残差は整数丸めが支配的（旧実装は r=1→preview_radius=0＝恒等が最悪ケースだったが、下限 1 で解消。「近似が残すズレ」の頁）。窓幅を厳密対応させる r'=r*s+(s-1)/2 も試したが、Triangle 縮小自体のローパスがあるため実装の round(r*s) の方が誤差が小さい。ガウスは sigma'=sigma*scale が厳密に成り立ち、sigma=radius/2 なので radius をスケールすれば自動的に満たされる（box は窓幅の離散化ぶんだけ近似）。「ピクセル単位の長さ」の中身＝box は窓幅 2r+1、ガウスは sigma。画像を scale 倍にリサンプルすると画像内のあらゆる長さが scale 倍になるので、カーネル幅も同じ scale 倍にすれば相対的な効き方が変わらない、と口頭で補う -->
+<!-- note: 出典 blur.rs の apply_stack_scaled / scaled_radius（round＋下限 1）, codec.rs の preview_scale / downscale_for_preview（Triangle 補間）, App.tsx の PREVIEW_MAX_DIM=1600。max(1, …) の下限は正の半径のみ＝radius=0 は scaled_radius が 0 を返し恒等のまま（担保はテスト scaled_radius_keeps_positive_radius_above_zero）。下限の理由（round で 0 に落ちると「プレビュー素通し・出力ぼけ」の WYSIWYG 破れ）は「近似が残すズレ」の頁で詳述。min(1, …) は preview_scale が長辺 <= max_dim で 1.0 を返す仕様に対応。妥当性検証: 「フル適用→縮小」を正解として 1 次元で比較すると、補正ありの平均誤差は 0.45–2.0/255（r>=3）、補正なしは 1.8–26 で 5〜25 倍改善。残差は整数丸めが支配的（旧実装は r=1→preview_radius=0＝恒等が最悪ケースだったが、下限 1 で解消。「近似が残すズレ」の頁）。この下限はガウス・ボックス以外の種別でも効く（モザイクは radius_to_block と合成され、担保はテスト mosaic_preview_never_collapses_to_identity）。窓幅を厳密対応させる r'=r*s+(s-1)/2 も試したが、Triangle 縮小自体のローパスがあるため実装の round(r*s) の方が誤差が小さい。ガウスは sigma'=sigma*scale が厳密に成り立ち、sigma=radius/2 なので radius をスケールすれば自動的に満たされる（box は窓幅の離散化ぶんだけ近似）。「ピクセル単位の長さ」の中身＝box は窓幅 2r+1、ガウスは sigma。画像を scale 倍にリサンプルすると画像内のあらゆる長さが scale 倍になるので、カーネル幅も同じ scale 倍にすれば相対的な効き方が変わらない、と口頭で補う -->
 
 ---
 
@@ -423,7 +423,7 @@ $$ \text{preview\_radius} = \max\!\left(1,\ \mathrm{round}(\text{radius} \times 
 - **なぜ厳密な「ブラー → 縮小」にしないか**: 毎入力でフル解像度のブラーと縮小をやり直す
   → 画素数 **6.25 倍**（4000×3000）。縮小を初回で済ませる今の順序が **LRU(1) キャッシュの前提**
 
-<!-- note: 出典 commands.rs:127（downscale）, 142（apply_stack_scaled）。厳密一致を取るなら「フル適用→縮小」だが、4000×3000=12.0M px に対し縮小後は 1600×1200=1.92M px で 6.25 倍の差（1/scale^2）。しかも縮小結果がブラー設定に依存するようになり、キャッシュできるのはデコード済みフル画像（48MB）までで、縮小そのものが毎入力の経路に入る。今の順序なら縮小ベース（7.7MB）を LRU(1) に載せられ、毎入力の仕事はブラー＋PNG だけで済む＝この近似が存在する理由。つまり「近似を選んだ」のではなく「キャッシュが成立する順序を選んだ結果として近似になった」 -->
+<!-- note: 出典 commands.rs の generate_preview（downscale_for_preview → apply_stack_scaled の順）。厳密一致を取るなら「フル適用→縮小」だが、4000×3000=12.0M px に対し縮小後は 1600×1200=1.92M px で 6.25 倍の差（1/scale^2）。しかも縮小結果がブラー設定に依存するようになり、キャッシュできるのはデコード済みフル画像（48MB）までで、縮小そのものが毎入力の経路に入る。今の順序なら縮小ベース（7.7MB）を LRU(1) に載せられ、毎入力の仕事はブラー＋PNG だけで済む＝この近似が存在する理由。つまり「近似を選んだ」のではなく「キャッシュが成立する順序を選んだ結果として近似になった」 -->
 
 ---
 
@@ -435,7 +435,7 @@ $$ \text{preview\_radius} = \max\!\left(1,\ \mathrm{round}(\text{radius} \times 
 - **表示側でもう一段縮む**: CSS の `max-width/max-height` ＋ `object-fit: contain`
 - 割り切り: 残る誤差は実用上ほぼ使わない領域 → **問題化したら詰める**（YAGNI）
 
-<!-- note: 出典 blur.rs:21-23（radius 0 は恒等）, blur.rs:92-97（scaled_radius: round と下限 1。担保は scaled_radius_keeps_positive_radius_above_zero blur.rs:210-216）, FilterControls.tsx:57-66（min/max は 59-60。UI radius は 0..100 なので radius=1 は到達可能）, styles.css:251-255。ガウスは radius→sigma(=radius/2) 変換の前段でスケールするので丸めが sigma にも乗る。縮小後の寸法も round(w×scale)/round(h×scale) なので、返る scale と実効倍率が軸ごとに微差を持つ（codec.rs:150-151）。表示側の縮小率はウィンドウサイズ次第で変わるため、厳密に見比べたいなら等倍表示が要る。なお本構成では max-width/max-height だけで箱の比が画像と一致するので object-fit: contain は実質効いていない（比が食い違う場合の保険）。画面上で実際に縮めているのは前者 -->
+<!-- note: 出典 blur.rs の blur_rgba（radius 0 は恒等）, blur.rs の scaled_radius（round と下限 1。担保はテスト scaled_radius_keeps_positive_radius_above_zero）, FilterControls.tsx の radius スライダー（min=0 / max=MAX_RADIUS_UI=100 なので radius=1 は到達可能）, styles.css の .preview-image。ガウスは radius→sigma(=radius/2) 変換の前段でスケールするので丸めが sigma にも乗る。縮小後の寸法も round(w×scale)/round(h×scale) なので、返る scale と実効倍率が軸ごとに微差を持つ（codec.rs の downscale_for_preview）。表示側の縮小率はウィンドウサイズ次第で変わるため、厳密に見比べたいなら等倍表示が要る。なお本構成では max-width/max-height だけで箱の比が画像と一致するので object-fit: contain は実質効いていない（比が食い違う場合の保険）。画面上で実際に縮めているのは前者 -->
 
 > > > **max-width / max-height: 100%**＝寸法の上限を親（`.canvas-viewport`）に制限。`<img>` は固有の縦横比を持つので、上限に当たると**比を保ったまま縮む**／**object-fit: contain**＝箱の大きさが決まった後、中の画像をどう収めるかの指定。比を保って収まる最大で描き、余りは余白
 
@@ -450,7 +450,7 @@ $$ \text{preview\_radius} = \max\!\left(1,\ \mathrm{round}(\text{radius} \times 
 - → N 件の是非は**切替の待ち時間**次第。1 件 約 6〜10MB で有界（縦横比で変動）＝大きい画像ほど得
 - → 毎入力で走るのは **ブラー ＋ PNG encode**。それを速くする話が次章
 
-<!-- note: 出典 commands.rs:26-37（PreviewBase）, 115-139（ロックスコープ: 117 で lock, ブロック終端で解放）, 141-145（ブラー/encode はロック外）。ミス時は read(123)→decode(125)→downscale(127) までロック保持のまま（単純さを優先）。fingerprint は内容の鮮度トークン（ImageRepository::fingerprint repository/mod.rs:81-86、照合は commands.rs:111-121）。FS 実装は len:mtime_nanos の近似で、mtime 粒度内に同サイズで書き換わった変更は検出できない割り切り＝上書き export 後に同じ画像を選び直しても保存前の stale なベースを掴まない（bug-fix で追加）。キーは ResourceLocation の生文字列比較で正規化しない＝表記違いはミス（repository/mod.rs:14-20）。max_dim をキーに含めるのは将来ズーム等で変わりうるため。ResourceLocation は画像の所在を表す値（FS ではパス文字列、将来 Drive なら file-id）で、非空を不変条件に持ち scheme 解析は持たない（単一 FS のため過剰、将来ルーティング導入時に追加）。max_dim は縮小後の長辺上限で現状 1600 固定。ヒット時はベースを clone してロックを即解放し、ブラーと PNG encode は常にロック外。省けるのは 4000×3000 の JPEG 再デコードなど。キャッシュ値がブラー前なのが要点で、結果をキャッシュしていたら radius/kind を変えるたび必ずミスになる。commands.rs:26 のコメント通り目的は「スライダー連打で再デコード/再縮小を避ける」ことで、この用途は同一キーへの連打なので容量 1 で足りる（ミスするのは画像を切り替えた瞬間だけ）。N 件にする利点は上下キーの前後送り（判定は shared/keybindings.ts:64-69 の ArrowUp/ArrowDown、App.tsx:96-103 の doPrev/doNext を 105 で配線）で行き来する場合にあるが、常駐メモリが約 6〜10MB×N（縮小後 w×h×4B）に増え、追い出し順序の管理とテストも要る＝YAGNI。fingerprint がキーに入ったため、N 件化しても stale ベースの窓は（mtime 粒度の限界を除き）広がらない＝N 件化の論点は純粋にメモリ × 切替時間のトレードオフ。実測（image 0.25 / release / decode+downscale, 読み込みは除く）: 1.9MP=13ms（縮小自体が起きない）, 4.3MP=139ms, 12MP=304ms, 24MP=421ms, 48MP=760ms。decode が約 10ms/MP で支配的。ベースは長辺 1600 にクランプされるのでサイズは縮小後 w×h×4B で有界 — 16:9 なら 1600×900×4B≈5.8MB、4:3 なら 1600×1200×4B≈7.7MB、正方形が最大の 1600×1600×4B≈10.2MB（スライドの「約 6〜10MB」はこの範囲の丸め。元画像がどれだけ大きくても超えない）。4:3 換算の 7.7MB で買える時間が 1.9MP では 13ms、48MP では 760ms と 58 倍違う。境界はおよそ 10MP（切替 300ms＝もたつきとして知覚され始める線）。本アプリの想定はスクショ 1920x1080≒2MP なので検討不要、カメラ写真 12MP 超＋前後送りの使い方が出てきたら N=3 の LRU か先読みを比較する -->
+<!-- note: 出典 commands.rs の PreviewBase, generate_preview のロックスコープ（先頭で lock, ブロック終端で解放）とロック外のブラー/encode。ミス時は read→decode→downscale_for_preview までロック保持のまま（単純さを優先）。fingerprint は内容の鮮度トークン（ImageRepository::fingerprint、照合は generate_preview のキャッシュキー比較）。FS 実装は len:mtime_nanos の近似で、mtime 粒度内に同サイズで書き換わった変更は検出できない割り切り＝上書き export 後に同じ画像を選び直しても保存前の stale なベースを掴まない（bug-fix で追加）。キーは ResourceLocation の生文字列比較で正規化しない＝表記違いはミス（repository/mod.rs の ResourceLocation）。max_dim をキーに含めるのは将来ズーム等で変わりうるため。ResourceLocation は画像の所在を表す値（FS ではパス文字列、将来 Drive なら file-id）で、非空を不変条件に持ち scheme 解析は持たない（単一 FS のため過剰、将来ルーティング導入時に追加）。max_dim は縮小後の長辺上限で現状 1600 固定。ヒット時はベースを clone してロックを即解放し、ブラーと PNG encode は常にロック外。省けるのは 4000×3000 の JPEG 再デコードなど。キャッシュ値がブラー前なのが要点で、結果をキャッシュしていたら radius/kind を変えるたび必ずミスになる。PreviewBase の doc コメント通り目的は「スライダー連打で再デコード/再縮小を避ける」ことで、この用途は同一キーへの連打なので容量 1 で足りる（ミスするのは画像を切り替えた瞬間だけ）。N 件にする利点は上下キーの前後送り（判定は shared/keybindings.ts の useKeybindings の ArrowUp/ArrowDown、App.tsx の doPrev/doNext を useKeybindings へ配線）で行き来する場合にあるが、常駐メモリが約 6〜10MB×N（縮小後 w×h×4B）に増え、追い出し順序の管理とテストも要る＝YAGNI。fingerprint がキーに入ったため、N 件化しても stale ベースの窓は（mtime 粒度の限界を除き）広がらない＝N 件化の論点は純粋にメモリ × 切替時間のトレードオフ。実測（image 0.25 / release / decode+downscale, 読み込みは除く）: 1.9MP=13ms（縮小自体が起きない）, 4.3MP=139ms, 12MP=304ms, 24MP=421ms, 48MP=760ms。decode が約 10ms/MP で支配的。ベースは長辺 1600 にクランプされるのでサイズは縮小後 w×h×4B で有界 — 16:9 なら 1600×900×4B≈5.8MB、4:3 なら 1600×1200×4B≈7.7MB、正方形が最大の 1600×1600×4B≈10.2MB（スライドの「約 6〜10MB」はこの範囲の丸め。元画像がどれだけ大きくても超えない）。4:3 換算の 7.7MB で買える時間が 1.9MP では 13ms、48MP では 760ms と 58 倍違う。境界はおよそ 10MP（切替 300ms＝もたつきとして知覚され始める線）。本アプリの想定はスクショ 1920x1080≒2MP なので検討不要、カメラ写真 12MP 超＋前後送りの使い方が出てきたら N=3 の LRU か先読みを比較する -->
 
 > > > **LRU(1)**＝容量 1 の LRU。直近の 1 件だけ保持し、別のキーが来たら捨てる（容量 1 では追い出し戦略が退化し、実装は `Option<PreviewBase>` の上書きだけ）
 
@@ -477,7 +477,7 @@ $$ \text{preview\_radius} = \max\!\left(1,\ \mathrm{round}(\text{radius} \times 
    中心ほど重い＝滑らかなぼけ          窓内すべて同じ重み＝単純平均
 ```
 
-<!-- note: 出典 blur.rs:32-37（blur_channels の match が2種の分岐点。blur_rgba がアルファ処理を挟んで委譲する）, domain/filter.rs（FilterKind::Gaussian / Block）。2D で書くとボックス核は K = (1/d²)·1_{d×d} だが、d（窓幅）や 1/d² の記法は「自前ボックスの前提」ページ以降で導入するため、このページは形の対比だけに留める。ガウスの重みは exp(-x²/2σ²) 型で ±2σ からほぼゼロ。O(n) 化の話は以降「ボックス」経路に限る点をここで明言する -->
+<!-- note: 出典 blur.rs の blur_channels（match が種別ごとの分岐点。blur_rgba がアルファ処理を挟んで委譲する）, domain/filter.rs の FilterKind（Gaussian / Block / Mosaic）。本章が扱うのはこのうちガウスとボックスの 2 経路で、モザイクは別系統（resize ベース）のため対象外。2D で書くとボックス核は K = (1/d²)·1_{d×d} だが、d（窓幅）や 1/d² の記法は「自前ボックスの前提」ページ以降で導入するため、このページは形の対比だけに留める。ガウスの重みは exp(-x²/2σ²) 型で ±2σ からほぼゼロ。O(n) 化の話は以降「ボックス」経路に限る点をここで明言する -->
 
 > > > **カーネル（核）**＝出力1画素を決めるとき、周囲の画素に掛ける重みの表。形がぼけの質を決める／**畳み込み（convolution）**＝窓をずらしながら「重み×画素値」の総和を取る演算。ブラー＝カーネルとの畳み込み／**ボックス（box）**＝UI 表記の「ブロック」と同一（コードは `FilterKind::Block`）。本文は「ボックス」で統一
 
@@ -491,7 +491,7 @@ $$ \text{preview\_radius} = \max\!\left(1,\ \mathrm{round}(\text{radius} \times 
 - `image` crate の `blur` / `fast_blur` も**ガウス系のみ**で、ボックス平均そのものは提供なし
 - → **ボックスだけ自前実装**。再発明ではなく「無い車輪」だけ作る
 
-<!-- note: 出典 imageproc-0.25.1/src/filter/mod.rs:152（box_filter(image: &GrayImage, ...) で Luma<u8> 固定シグネチャ）, 309-317（gaussian_blur_f32<P: Pixel> はジェネリック）。box_filter を RGBA に使うにはチャネル分解4回＋再合成が必要で、それを書くくらいなら running-sum ごと自前化した方が単純。fast_blur はボックス3回反復によるガウス近似（Kovesi 2010）で「ブロック平均そのもの」ではない。実は imageproc の box_filter も内部は running-sum 系 O(n)（mod.rs:162-200）＝自前化の動機はアルゴリズムではなく「型」。ただし box_filter は除算が切り捨てで、自前版は (sum+half)/d の四捨五入という品質差もある。想定QA「ガウスも自前で O(n) 化できるのでは？」→ ボックス3回反復で近似可能（fast_blur がまさにそれ）だが MVP では YAGNI。1章の「速度が問題化したら libblur へ差し替え」と同じ判断軸 -->
+<!-- note: 出典 imageproc 0.25.1 の filter::box_filter（box_filter(image: &GrayImage, ...) で Luma<u8> 固定シグネチャ）, filter::gaussian_blur_f32<P: Pixel>（ジェネリック）。box_filter を RGBA に使うにはチャネル分解4回＋再合成が必要で、それを書くくらいなら running-sum ごと自前化した方が単純。fast_blur はボックス3回反復によるガウス近似（Kovesi 2010）で「ブロック平均そのもの」ではない。実は imageproc の box_filter も内部は running-sum 系 O(n)＝自前化の動機はアルゴリズムではなく「型」。ただし box_filter は除算が切り捨てで、自前版は (sum+half)/d の四捨五入という品質差もある。想定QA「ガウスも自前で O(n) 化できるのでは？」→ ボックス3回反復で近似可能（fast_blur がまさにそれ）だが MVP では YAGNI。1章の「速度が問題化したら libblur へ差し替え」と同じ判断軸 -->
 
 > > > **ジェネリック**＝画素型を差し替えられる関数の書き方（`<P: Pixel>`）。`gaussian_blur_f32` は RGBA でも Gray でも呼べるが、`box_filter` は引数の型が `GrayImage` に固定されている
 
@@ -514,7 +514,7 @@ $$ \text{preview\_radius} = \max\!\left(1,\ \mathrm{round}(\text{radius} \times 
   ● = 中心画素、▓ = 一緒に平均する近傍
 ```
 
-<!-- note: 出典 blur.rs:107-109（let r = radius as i64; let d = 2 * r + 1; コメント「window 幅（除数, 一定）」）。d を偶数にしないのは、窓の中心が画素と画素の間に落ちて出力が半画素ずれる（位相シフト）ため。奇数窓は畳み込みの標準的な取り方。r=0 は d=1（自分 1 画素の平均＝恒等）で、blur_rgba の radius==0 早期 return と整合する。以降の使い分け: 計算量の話は UI 入力である r で語り（O(n·r²) など）、実装の窓幅・除数の話は d で語る（(sum+half)/d など）。r と d は 1 対 1 なのでどちらで語っても同じことの言い換え -->
+<!-- note: 出典 blur.rs の box_blur_rgba 冒頭（let r = radius as i64; let d = 2 * r + 1; コメント「window 幅（除数, 一定）」）。d を偶数にしないのは、窓の中心が画素と画素の間に落ちて出力が半画素ずれる（位相シフト）ため。奇数窓は畳み込みの標準的な取り方。r=0 は d=1（自分 1 画素の平均＝恒等）で、blur_rgba の radius==0 早期 return と整合する。以降の使い分け: 計算量の話は UI 入力である r で語り（O(n·r²) など）、実装の窓幅・除数の話は d で語る（(sum+half)/d など）。r と d は 1 対 1 なのでどちらで語っても同じことの言い換え -->
 
 ---
 
@@ -535,7 +535,7 @@ $$ \text{preview\_radius} = \max\!\left(1,\ \mathrm{round}(\text{radius} \times 
   └──┴──┴──┴──┴──┘     └──┴──┴──┴──┴──┘
 ```
 
-<!-- note: この素朴版はコード上に存在しない（対比用の理論値）。cost = n·(2r+1)² = O(n·r²)、r=20 なら窓 41×41 = 1681。d の定義は blur.rs:108（box_blur_rgba）、半径上限は domain/filter.rs:10（MAX_RADIUS=500）、UI 上限は FilterControls.tsx（0..100）→ r=100 なら窓 201×201 = 40401 画素を読んで出力1画素。200億の内訳 = 12M 画素 × 1681 ≈ 2.0×10^10/チャネル（×4チャネル）。1サンプル 1ns でも 20秒/チャネル級で、3章のスライダー追従（debounce 130ms）とは3桁合わない。「r² が効く」の直観＝窓は面積なので、1次元の半径を2倍にすると読む量は4倍。想定QA「実測は？」→ 素朴版は実装していないので理論値。ただし仕事量が窓面積に比例するのは自明で、以降の削減率（1681→82→約4）はこの値を分母に語れる。想定QA「UI が 100 までなのに MAX_RADIUS が 500 なのは？」→ ドメインの上限はプリセット等将来の入力経路も縛る契約で、UI スライダーはその部分集合 -->
+<!-- note: この素朴版はコード上に存在しない（対比用の理論値）。cost = n·(2r+1)² = O(n·r²)、r=20 なら窓 41×41 = 1681。d の定義は blur.rs の box_blur_rgba、半径上限は domain/filter.rs の MAX_RADIUS=500、UI 上限は FilterControls.tsx の MAX_RADIUS_UI=100 → r=100 なら窓 201×201 = 40401 画素を読んで出力1画素。200億の内訳 = 12M 画素 × 1681 ≈ 2.0×10^10/チャネル（×4チャネル）。1サンプル 1ns でも 20秒/チャネル級で、3章のスライダー追従（debounce 130ms）とは3桁合わない。「r² が効く」の直観＝窓は面積なので、1次元の半径を2倍にすると読む量は4倍。想定QA「実測は？」→ 素朴版は実装していないので理論値。ただし仕事量が窓面積に比例するのは自明で、以降の削減率（1681→82→約4）はこの値を分母に語れる。想定QA「UI が 100 までなのに MAX_RADIUS が 500 なのは？」→ ドメインの上限はプリセット等将来の入力経路も縛る契約で、UI スライダーはその部分集合 -->
 
 > > > **O 記法**＝入力が大きくなったとき計算量が「どう増えるか」の形だけを比べる記法（定数倍は無視）。ここでは $n$＝画素数、$r$＝ブラー半径。$O(n \cdot r^2)$＝「画素数に比例、かつ半径の2乗に比例」
 
@@ -550,7 +550,7 @@ $$ K_{\text{box}} = k \otimes k, \quad k = \tfrac{1}{d}\,[1, 1, \dots, 1] $$
 - つまり「$d \times d$ の平均」＝「**横 1D 平均 → その結果を縦 1D 平均**」の2段で同じ結果
 - 読みが $d^2 \to 2d$ に減る: r=20 で **1681 → 82（約20分の1）**
 
-<!-- note: 分離できる条件はカーネルがランク1（外積1組で書ける）こと。ガウス・ボックスは該当、円形カーネルは非該当。「平均の平均=全体平均」が成り立つのは重みが一律だから（総和の順序交換）。ガウスも同様に分離でき、imageproc は separable_filter_equal で分離実装している（mod.rs:309-317） -->
+<!-- note: 分離できる条件はカーネルがランク1（外積1組で書ける）こと。ガウス・ボックスは該当、円形カーネルは非該当。「平均の平均=全体平均」が成り立つのは重みが一律だから（総和の順序交換）。ガウスも同様に分離でき、imageproc は gaussian_blur_f32 が separable_filter_equal を呼んで分離実装している -->
 
 > > > **分離可能性（separability）**＝2D カーネルが「横1本 ⊗ 縦1本」の外積に分解できる性質。$d \times d$ の読みが $d + d$ に減る（分解できない例: 円形の窓）／**⊗（外積）**＝縦ベクトル×横ベクトルで行列を作る演算
 
@@ -573,7 +573,7 @@ $$ K_{\text{box}} = k \otimes k, \quad k = \tfrac{1}{d}\,[1, 1, \dots, 1] $$
 - ガウスも imageproc 内部で分離済み → **ここまでは両者同じ土俵**
 - ただし「r に比例して遅くなる」構造は残る → 次ページで **r を消す**
 
-<!-- note: 出典 blur.rs:103-145（box_blur_rgba: tmp 確保 112、水平パス 114-126、垂直パス 128-142）。チャネル c を走査軸の外側に置き（水平は y→c→x、垂直は x→c→y の三重ループ）sample クロージャで src を引く構造。カーネル自体は 4 チャネル独立で、アルファの解釈は blur_rgba に集約（blur.rs:20-29）— 半透明を含む画像は premultiply→blur→unpremultiply（適用は blur.rs:24-28、ヘルパー定義 40-65）で透明画素の色にじみを防ぎ、a=0 の出力は (0,0,0,0)。全不透明（スクショ等の大多数）は変換を省く fast path で結果は同一。担保は transparent_pixels_do_not_bleed_color（blur.rs:219-231）。tmp を u8 で持つため水平パスの丸め誤差（±0.5LSB 程度）が垂直パスへ伝播する割り切りもある（i16/f32 中間ならメモリ2〜4倍。imageproc の box_filter も同じ構造で、ソースに「x/y 両方で丸め誤差を払う」TODO コメントが残る mod.rs:171-172 ＝標準的な割り切り。一様画像では丸めが発生しないので、境界スライドの不変性テストはこの誤差の影響を受けない）。ガウスは重みが位置で変わるため次ページの running-sum は使えない。σ=r/2 だと imageproc のカーネル半径は ceil(2σ)≒r なので、ガウス経路は O(n·r) のまま＝半径を上げるとガウスだけ遅くなる（体感差の説明） -->
+<!-- note: 出典 blur.rs の box_blur_rgba（tmp 確保 → 水平パス → 垂直パス）。チャネル c を走査軸の外側に置き（水平は y→c→x、垂直は x→c→y の三重ループ）sample クロージャで src を引く構造。カーネル自体は 4 チャネル独立で、アルファの解釈は blur_rgba に集約 — 半透明を含む画像は premultiply→blur→unpremultiply（適用は blur_rgba、ヘルパーは premultiply / unpremultiply）で透明画素の色にじみを防ぎ、a=0 の出力は (0,0,0,0)。全不透明（スクショ等の大多数）は変換を省く fast path で結果は同一。担保はテスト transparent_pixels_do_not_bleed_color。tmp を u8 で持つため水平パスの丸め誤差（±0.5LSB 程度）が垂直パスへ伝播する割り切りもある（i16/f32 中間ならメモリ2〜4倍。imageproc の box_filter も同じ構造で、ソースに「x/y 両方で丸め誤差を払う」TODO コメントが残る＝標準的な割り切り。一様画像では丸めが発生しないので、境界スライドの不変性テストはこの誤差の影響を受けない）。ガウスは重みが位置で変わるため次ページの running-sum は使えない。σ=r/2 だと imageproc のカーネル半径は ceil(2σ)≒r なので、ガウス経路は O(n·r) のまま＝半径を上げるとガウスだけ遅くなる（体感差の説明） -->
 
 ---
 
@@ -592,7 +592,7 @@ $$ \text{sum} \mathrel{+}= s(x{+}r) - s(x{-}1{-}r), \quad s(i) = \text{位置 } 
   sum(x) = sum(x−1) − s0（出る画素）＋ s5（入る画素） — 共通の s1〜s4 は触らない
 ```
 
-<!-- note: 出典 blur.rs:119-123（box_blur_rgba 水平パス: 初期和 119、差分更新 122）, 135-139（垂直パス: 初期和 135、差分更新 138）。式の s(i) は実装では sample クロージャ（blur.rs:118, 134。境界 clamp 込みの画素読み出し、clamp の中身は「端でも正確に」のページで扱う）。窓を丸ごと総和するのは各行・各列の先頭の1回だけ＝厳密な時間計算量は O(n + (w+h)·r) で、r ≪ min(w,h) なら実質 O(n)。また O(n) は時間の話で、空間は tmp バッファ1枚ぶん O(n) の追加メモリを使う。想定QA「除算が毎画素あるのに定数？」→ d は固定なので O(1)。「並列化・SIMD は？」→ 行・列単位で自明に並列化可能だが未実施（1章の「速度が問題化したら libblur」と同じ YAGNI 判断）。「実測は？」→ ベンチ未整備。検証するなら「r を変えても実行時間がほぼ変わらないこと」を criterion で -->
+<!-- note: 出典 blur.rs の box_blur_rgba（水平パス・垂直パスとも「初期和 → 差分更新」の形）。式の s(i) は実装では各パスの sample クロージャ（境界 clamp 込みの画素読み出し、clamp の中身は「端でも正確に」のページで扱う）。窓を丸ごと総和するのは各行・各列の先頭の1回だけ＝厳密な時間計算量は O(n + (w+h)·r) で、r ≪ min(w,h) なら実質 O(n)。また O(n) は時間の話で、空間は tmp バッファ1枚ぶん O(n) の追加メモリを使う。想定QA「除算が毎画素あるのに定数？」→ d は固定なので O(1)。「並列化・SIMD は？」→ 行・列単位で自明に並列化可能だが未実施（1章の「速度が問題化したら libblur」と同じ YAGNI 判断）。「実測は？」→ ベンチ未整備。検証するなら「r を変えても実行時間がほぼ変わらないこと」を criterion で -->
 
 > > > **running-sum（移動和）**＝直前の窓の合計を使い回し、出入りする端の差分だけで次の合計を得る技法。「移動平均」と同じ原理。総和の再計算 $O(d)$ が差分更新 $O(1)$ になる
 
@@ -611,7 +611,7 @@ tmp[i] = ((sum + half) / d) as u8;              // 固定除数 d の整数四�
 - 状態は `sum` の **1変数**のみ — 同じ O(n) の定番「**積分画像**」より省メモリ
 - 削減の全体像: **1681 → 82 → 約4 サンプル/画素**（r=20）— 画素ごとの更新から **r が消えた**
 
-<!-- note: 出典 blur.rs:119-123（水平パス。実コードの添字は tmp[(row + x as usize) * 4 + c]）。和の最大は 255×d（r≤500 で d=1001 → 約 255K）で i64 には大余裕だが、x-1-r で負の座標計算があるため符号付きが必須。(sum+half)/d は正数の四捨五入イディオム。imageproc の box_filter は切り捨て除算なので、ここは自前版の方が丁寧。浮動小数の running-sum は加減算のたびに丸めが乗って誤差が蓄積しうるが、整数なら sum は常に厳密。ただし「正確」の範囲は移動和 sum まで — 水平パスの結果を u8 に丸めて渡すため、理想の 2D 平均との差は ±1LSB 程度残る（「分離の実装」ページ note の割り切りと同じ話）。running-sum は状態が sum 1変数でキャッシュ局所性も良い -->
+<!-- note: 出典 blur.rs の box_blur_rgba 水平パス（実コードの添字は tmp[(row + x as usize) * 4 + c]）。和の最大は 255×d（r≤500 で d=1001 → 約 255K）で i64 には大余裕だが、x-1-r で負の座標計算があるため符号付きが必須。(sum+half)/d は正数の四捨五入イディオム。imageproc の box_filter は切り捨て除算なので、ここは自前版の方が丁寧。浮動小数の running-sum は加減算のたびに丸めが乗って誤差が蓄積しうるが、整数なら sum は常に厳密。ただし「正確」の範囲は移動和 sum まで — 水平パスの結果を u8 に丸めて渡すため、理想の 2D 平均との差は ±1LSB 程度残る（「分離の実装」ページ note の割り切りと同じ話）。running-sum は状態が sum 1変数でキャッシュ局所性も良い -->
 
 > > > **積分画像（summed-area table）**＝左上からの累積和を前計算し、任意の矩形の総和を4点の参照で得るデータ構造。これも O(n) 化の定番だが、画像1枚分の追加メモリと桁あふれ管理が要る
 
@@ -631,7 +631,7 @@ tmp[i] = ((sum + half) / d) as u8;              // 固定除数 d の整数四�
   除数は d=5 のまま → 一様画像なら端でも 平均 = 元の値（暗くならない）
 ```
 
-<!-- note: 出典 blur.rs:147-150（clamp_idx）, 99-102（box_blur_rgba doc「端でも減算されない（暗くならない）」）。clamp は端画素の重みが実質増える（端1画素が最大 r+1 回サンプルされる）バイアスと引き換えに、ループ本体を単純に保つ。ぼかしの目的（隠す）には十分。想定QA「幅より半径が大きい画像（w < r）は？」→ clamp が全部端に張り付くだけで安全。事前条件は 1x1 以上（blur.rs:17）で 1x1 でも成立 -->
+<!-- note: 出典 blur.rs の clamp_idx, box_blur_rgba の doc コメント「端でも減算されない（暗くならない）」。clamp は端画素の重みが実質増える（端1画素が最大 r+1 回サンプルされる）バイアスと引き換えに、ループ本体を単純に保つ。ぼかしの目的（隠す）には十分。想定QA「幅より半径が大きい画像（w < r）は？」→ clamp が全部端に張り付くだけで安全。事前条件は 1x1 以上（blur_rgba の doc コメント）で 1x1 でも成立 -->
 
 > > > **エッジ複製（edge clamp / replicate padding）**＝画像の外側を「最も近い端の画素が続いている」とみなす境界規則。ゼロ埋め（外を黒とみなす）、ミラー（折り返し）と並ぶ定番の1つ
 
@@ -648,23 +648,23 @@ tmp[i] = ((sum + half) / d) as u8;              // 固定除数 d の整数四�
 
 - 担保: `box_blur_of_uniform_image_is_unchanged` — **一様画像は端の1画素まで不変**
 - ゼロ埋めや除数のバグならこの性質テストが**即 fail** — 安価で強い回帰テスト
-- imageproc のガウス経路も同じ edge clamp → **2種のブラー**で境界の見え方が揃う
+- imageproc のガウス経路も同じ edge clamp → **ガウスとボックス**で境界の見え方が揃う
 
-<!-- note: 出典 blur.rs:178-184（半径3・9×9 一様画像 [40,80,120,200] の完全一致テスト。premultiply 往復込みの blur_rgba 経路でも同じ一様画像が不変なことは semi_transparent_uniform_image_is_unchanged blur.rs:233-240 が担保）。一様画像不変は「境界の正規化が正しい」ことの性質テストで、期待画像を用意せずに境界バグを検出できる。ゼロ埋めは窓総和に 0 が混ざり端が周辺減光状に暗くなる。「除数を窓内の実画素数にする」正規化でも暗化は防げるが、差分更新に端専用の分岐と除数の再計算が入り running-sum の単純さが崩れる。ミラーは効果がほぼ同等な一方、running-sum の差分更新で添字の折り返し計算が入り、clamp（i.clamp(0, n-1) の1行）より複雑になる。imageproc の horizontal_filter / vertical_filter も同じ edge clamp（mod.rs:384 の max(0, min(x, w-1))）で、ガウスとボックスの境界の見え方が揃う。3章の「単一実装」は経路の話、ここは kind 間の整合の話。この「2種のブラー」の橋が次ページの radius ↔ sigma（1本のスライダー）へ渡る -->
+<!-- note: 出典 テスト box_blur_of_uniform_image_is_unchanged（半径3・9×9 一様画像 [40,80,120,200] の完全一致テスト。premultiply 往復込みの blur_rgba 経路でも同じ一様画像が不変なことはテスト semi_transparent_uniform_image_is_unchanged が担保）。一様画像不変は「境界の正規化が正しい」ことの性質テストで、期待画像を用意せずに境界バグを検出できる。ゼロ埋めは窓総和に 0 が混ざり端が周辺減光状に暗くなる。「除数を窓内の実画素数にする」正規化でも暗化は防げるが、差分更新に端専用の分岐と除数の再計算が入り running-sum の単純さが崩れる。ミラーは効果がほぼ同等な一方、running-sum の差分更新で添字の折り返し計算が入り、clamp（i.clamp(0, n-1) の1行）より複雑になる。imageproc の horizontal_filter / vertical_filter も同じ edge clamp（max(0, min(x, w-1))）で、ガウスとボックスの境界の見え方が揃う。3章の「単一実装」は経路の話、ここはガウス／ボックス間の整合の話（モザイクは resize が境界の重みを正規化するため別系統だが、一様画像不変はテスト mosaic_uniform_image_is_unchanged が同じく担保する）。このガウス／ボックスの橋が次ページの radius ↔ sigma（1本のスライダー）へ渡る -->
 
 ---
 
-## radius ↔ sigma — 2種のブラーを1本のスライダーで
+## radius ↔ sigma — 種別ごとの固定変換で1本のスライダーに
 
 $$ \text{sigma} = \text{radius} / 2 $$
 
-- UI の強度は **radius 1本**。だがガウスの強度パラメータは本来 **sigma**
-  → `radius_to_sigma` の**固定変換**で接続（UI とパイプラインの契約）
+- UI の強度は **radius 1本**。ガウスの強度は本来 **sigma** → 種別ごとの**固定変換**で接続
+  ガウス `sigma=radius/2`／ボックス `d=2r+1`／モザイク `block=radius+1`
 - **/2 の根拠**: ガウスの重みが実質届くのは **±2σ** まで → それをボックスの **±r** に合わせる（次ページ）
 - 数学的な等価変換ではない — **実装上の取り決め**（変換は1関数に固定、変えるなら1行）
 - radius=0 は `blur_rgba` が早期 return — imageproc は `assert!(sigma > 0)` で **panic** するため
 
-<!-- note: 出典 blur.rs:11-13（radius_to_sigma）, 21-23（blur_rgba の radius==0 早期 return）; imageproc mod.rs:314（assert!(sigma > 0.0)）。分散を一致させる厳密値は離散窓 [-r,r] で σ=√(r(r+1)/3)（連続近似で r/√3 ≈ 0.577r）。採用値 0.5r との差は約15%で、厳密対応を捨てても体感差は小さく「2で割る」単純さを優先した取り決め。radius==0 の早期 return は panic 防御と「恒等」の事後条件を兼ね、防御を境界の1箇所（blur_rgba）に置くことで内部の box_blur_rgba は radius>=1 前提で書ける。3章との接続: プレビューは radius を scale 倍してから変換するので sigma も自動で scale 倍される（スケール補正が両 kind で通る）。想定QA「なぜ UI を sigma にしない？」→ box に sigma は無く、共通の直観は「何ピクセルぼかすか」＝radius -->
+<!-- note: 出典 blur.rs の radius_to_sigma / radius_to_block / blur_rgba の radius==0 早期 return; imageproc の gaussian_blur_f32 の assert!(sigma > 0.0)。分散を一致させる厳密値は離散窓 [-r,r] で σ=√(r(r+1)/3)（連続近似で r/√3 ≈ 0.577r）。採用値 0.5r との差は約15%で、厳密対応を捨てても体感差は小さく「2で割る」単純さを優先した取り決め。radius==0 の早期 return は panic 防御と「恒等」の事後条件を兼ね、防御を境界の1箇所（blur_rgba）に置くことで内部の box_blur_rgba は radius>=1 前提で書ける。3章との接続: プレビューは radius を scale 倍してから変換するので sigma も自動で scale 倍される（スケール補正が種別を問わず通る。モザイクの block も同様に radius 側でスケールされる）。想定QA「なぜ UI を sigma にしない？」→ box に sigma は無く、共通の直観は「何ピクセルぼかすか」＝radius。想定QA「モザイクの変換は？」→ radius_to_block で block = radius + 1（radius 0 は block 1 ＝恒等、正の radius は必ず可視のピクセル化。担保はテスト radius_to_block_contract） -->
 
 > > > **sigma（σ・標準偏差）**＝ガウス分布の広がり幅。ガウスブラーの強度は本来 σ で指定し、重みの約95%が ±2σ に収まる／**固定変換**＝アプリ内の取り決めとして1関数に固定した対応。数学的な等価変換ではない
 
@@ -686,7 +686,7 @@ $$ \text{sigma} = \text{radius} / 2 $$
 - 「効く範囲」をボックスの **±r** に揃える: $2\sigma = r$ → **$\sigma = r/2$**（/2 はここから）
 - 実装も一致: imageproc は核を **±ceil(2σ) で打ち切る** → σ=r/2 で読む近傍は**ちょうど ±r**
 
-<!-- note: 出典 imageproc mod.rs:287-288（gaussian_kernel_f32: kernel_radius = ceil(2.0*sigma)）。±2σ に重みの約95%が収まるので打ち切りの影響は小さい。導出の向きは「揃えたい範囲が先、σ が後」: box の ±r という見た目の効き幅を基準に、ガウスの実効範囲 ±2σ をそこへ一致させると σ=r/2 が出る。結果、同じスライダー値で2種のブラーの効き幅の体感が揃う。blur.rs は事前条件・事後条件をコメントで明文化し（blur.rs:17-19, 69, 89）radius_to_sigma を「契約」と呼ぶ（DbC の実践）。本編はここまでで、次はまとめ -->
+<!-- note: 出典 imageproc の gaussian_kernel_f32（kernel_radius = ceil(2.0*sigma)）。±2σ に重みの約95%が収まるので打ち切りの影響は小さい。導出の向きは「揃えたい範囲が先、σ が後」: box の ±r という見た目の効き幅を基準に、ガウスの実効範囲 ±2σ をそこへ一致させると σ=r/2 が出る。結果、同じスライダー値でガウスとボックスの効き幅の体感が揃う。blur.rs は事前条件・事後条件をコメントで明文化し（blur_rgba / apply_stack / apply_stack_scaled の doc コメント）radius_to_sigma を「契約」と呼ぶ（DbC の実践）。本編はここまでで、次はまとめ -->
 
 ---
 
